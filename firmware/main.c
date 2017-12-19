@@ -25,25 +25,26 @@
 //******************************************************************************
 
 // include section
-#include <msp430g2553.h>
+//#include <msp430g2553.h>
+#include <msp430g2231.h>
 //#include <msp430g2452.h>
 
 #include <stdint.h>
 #include <stdbool.h>
 
 // board (leds)
-#define LED_INIT() {P1DIR|=0x41;P1OUT&=~0x41;}
+/*#define LED_INIT() {P1DIR|=0x41;P1OUT&=~0x41;}
 #define LED_RED_ON() {P1OUT|=0x01;}
 #define LED_RED_OFF() {P1OUT&=~0x01;}
 #define LED_RED_SWAP() {P1OUT^=0x01;}
 #define LED_GREEN_ON() {P1OUT|=0x40;}
 #define LED_GREEN_OFF() {P1OUT&=~0x40;}
-#define LED_GREEN_SWAP() {P1OUT^=0x40;}
+#define LED_GREEN_SWAP() {P1OUT^=0x40;}*/
 
-#define COIL_INIT() do{P1DIR|=0x30;P1OUT&=~0x30;}while(0)
-#define COIL_A_ON() do{P1OUT|=0x10;}while(0)
-#define COIL_B_ON() do{P1OUT|=0x20;}while(0)
-#define COIL_OFF() do{P1OUT&=~0x30;}while(0)
+#define COIL_INIT() do{P1DIR|=0xC0;P1OUT&=~0xC0;}while(0)
+#define COIL_A_ON() do{P1OUT|=0x40;}while(0)
+#define COIL_B_ON() do{P1OUT|=0x80;}while(0)
+#define COIL_OFF() do{P1OUT&=~0xC0;}while(0)
 
 #define TICKS_MIN 384
 #define TICKS_AVG 448
@@ -63,7 +64,7 @@ void rtc_timer_init(void)
 
 void analog_init(void)
 {
-    P1DIR |= 0x03; P1OUT&=~0x03;
+    P1DIR |= 0x30; P1OUT&=~0x30;
     ADC10CTL0 = ADC10SHT_2 + ADC10ON + ADC10IE; // ADC10ON, interrupt enabled
     ADC10CTL1 = INCH_3;                         // input A3
     ADC10AE0 |= 0x08;                           // PA.3 ADC option select
@@ -76,7 +77,7 @@ void board_init(void)
 	BCSCTL1 = CALBC1_1MHZ;		// Set DCO
 	DCOCTL = CALDCO_1MHZ;
 
-	LED_INIT();
+	//LED_INIT();
 	COIL_INIT();
 }
 
@@ -95,7 +96,7 @@ int main(void)
 	{
         __bis_SR_register(CPUOFF + GIE); // enter sleep mode
         // switch on potentiometer
-        P1OUT |= 0x02;
+        P1OUT |= 0x20;
         __delay_cycles(200);
         // start conversion
         ADC10CTL0 |= ENC + ADC10SC;
@@ -103,7 +104,7 @@ int main(void)
         // get value
         ticks = TICKS_MIN + (ADC10MEM>>3);
         // switch it off
-        P1OUT &= ~0x02;
+        P1OUT &= ~0x20;
 	}
 
 	return -1;
@@ -135,7 +136,7 @@ __interrupt void Timer_A (void)
             COIL_A_ON();
         else
             COIL_B_ON();
-        LED_GREEN_ON();
+        //LED_GREEN_ON();
         A = !A;
         coil_on = 2;
         next += ticks;
@@ -144,7 +145,7 @@ __interrupt void Timer_A (void)
     // coil zeroing
 	else {
         if (coil_on) {
-            LED_GREEN_OFF();
+            //LED_GREEN_OFF();
             coil_on--;
             if (coil_on==0)
                 COIL_OFF();
