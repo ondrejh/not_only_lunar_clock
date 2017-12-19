@@ -1,25 +1,25 @@
 //******************************************************************************
-// Pomodoro timer for MSP430 launchpad
+// Lunar clock timer for MSP430 launchpad
 //
 //
-// author:          Ondrej Hejda
-// date (started):  28.2.2013
+// author: Ondrej Hejda
+// date:   19.12.2017
 //
-// hardware: MSP430G2553 (launchpad)
+// hardware: MSP430G2231 (launchpad)
 //
-//                MSP4302553
+//                MSP4302231
 //             -----------------
 //         /|\|                 |
 //          | |             XTAL|<---> 32.768kHz quartz (realtime clock)
 //          --|RST              |
 //            |                 |
-//            |             P1.4|----> COIL
-//            |             P1.5|----> COIL
+//            |             P1.6|----> COIL
+//            |             P1.7|----> COIL
 //            |                 |
-//            |             P1.0|--------------
-//            |             P1.1|----[XXXX]----
-//            |             P1.2|      /\
 //            |             P1.3|-------  POTENTIOMETER (10k)
+//            |                 |      \/
+//            |             P1.4|----[XXXX]----
+//            |             P1.5|--------------
 //            |                 |
 //
 //******************************************************************************
@@ -31,15 +31,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-
-// board (leds)
-/*#define LED_INIT() {P1DIR|=0x41;P1OUT&=~0x41;}
-#define LED_RED_ON() {P1OUT|=0x01;}
-#define LED_RED_OFF() {P1OUT&=~0x01;}
-#define LED_RED_SWAP() {P1OUT^=0x01;}
-#define LED_GREEN_ON() {P1OUT|=0x40;}
-#define LED_GREEN_OFF() {P1OUT&=~0x40;}
-#define LED_GREEN_SWAP() {P1OUT^=0x40;}*/
 
 #define COIL_INIT() do{P1DIR|=0xC0;P1OUT&=~0xC0;}while(0)
 #define COIL_A_ON() do{P1OUT|=0x40;}while(0)
@@ -77,7 +68,6 @@ void board_init(void)
 	BCSCTL1 = CALBC1_1MHZ;		// Set DCO
 	DCOCTL = CALDCO_1MHZ;
 
-	//LED_INIT();
 	COIL_INIT();
 }
 
