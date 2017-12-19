@@ -16,6 +16,11 @@
 //            |             P1.4|----> COIL
 //            |             P1.5|----> COIL
 //            |                 |
+//            |             P1.0|--------------
+//            |             P1.1|----[XXXX]----
+//            |             P1.2|      /\
+//            |             P1.3|-------  POTENTIOMETER (10k)
+//            |                 |
 //
 //******************************************************************************
 
@@ -56,6 +61,14 @@ void rtc_timer_init(void)
 	TACTL = TASSEL_1 + ID_3 + MC_1; // ACLK, /8, upmode
 }
 
+void analog_init(void)
+{
+    P1DIR |= 0x03; P1OUT&=~0x03;
+    ADC10CTL0 = ADC10SHT_2 + ADC10ON + ADC10IE; // ADC10ON, interrupt enabled
+    ADC10CTL1 = INCH_3;                         // input A3
+    ADC10AE0 |= 0x08;                           // PA.3 ADC option select
+}
+
 // leds and dco init
 void board_init(void)
 {
@@ -67,6 +80,8 @@ void board_init(void)
 	COIL_INIT();
 }
 
+volatile uint16_t ticks = TICKS_AVG;
+
 // main program body
 int main(void)
 {
@@ -74,10 +89,21 @@ int main(void)
 
 	board_init(); // init dco and leds
 	rtc_timer_init(); // init 32kHz clock timer
+    analog_init();
 
 	while(1)
 	{
         __bis_SR_register(CPUOFF + GIE); // enter sleep mode
+        // switch on potentiometer
+        P1OUT |= 0x02;
+        __delay_cycles(200);
+        // start conversion
+        ADC10CTL0 |= ENC + ADC10SC;
+        __bis_SR_register(CPUOFF + GIE);
+        // get value
+        ticks = TICKS_MIN + (ADC10MEM>>3);
+        // switch it off
+        P1OUT &= ~0x02;
 	}
 
 	return -1;
@@ -109,19 +135,31 @@ __interrupt void Timer_A (void)
             COIL_A_ON();
         else
             COIL_B_ON();
+        LED_GREEN_ON();
         A = !A;
         coil_on = 2;
-        next+=TICKS_AVG;
+        next += ticks;
     }
     
     // coil zeroing
 	else {
         if (coil_on) {
+            LED_GREEN_OFF();
             coil_on--;
             if (coil_on==0)
                 COIL_OFF();
         }   
 	}
 
+    if (cnt==0)
+        __bic_SR_register_on_exit(CPUOFF); // Clear CPUOFF bit from 0(SR)
+
 	cnt++;
+}
+
+// ADC10 interrupt service routine
+#pragma vector=ADC10_VECTOR
+__interrupt void ADC10_ISR(void)
+{
+    __bic_SR_register_on_exit(CPUOFF); // Clear CPUOFF bit from 0(SR)
 }
