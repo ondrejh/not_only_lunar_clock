@@ -1,5 +1,5 @@
 //******************************************************************************
-// Police light timer for MSP430 launchpad
+// Semaphor light timer for MSP430 launchpad
 //
 //
 // author: Ondrej Hejda
@@ -11,7 +11,9 @@
 //             -----------------
 //         /|\|                 |
 //          | |                 |
-//          --|RST          P1.6|----> LED
+//          --|RST          P1.0|----> RED
+//            |             P1.1|----> YELLOW
+//            |             P1.2|----> GREEN
 //            |                 |
 //
 //******************************************************************************
@@ -24,16 +26,17 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define LED_INIT() do{P1DIR|=0x40;P1OUT&=~0x40;}while(0)
-#define LED_ON() do{P1OUT|=0x40;}while(0)
-#define LED_OFF() do{P1OUT&=~0x40;}while(0)
+#define LED_INIT() do{P1DIR|=0xE0;P1OUT&=~0xE0;}while(0)
+#define OFF() do{P1OUT&=~0xE0;}while(0)
+#define RED() do{OFF();P1OUT|=0xC0;}while(0)
+#define YELLOW() do{OFF();P1OUT|=0x60;}while(0)
+#define GREEN() do{OFF();P1OUT|=0x80;}while(0)
+#define RED_YELLOW() do{OFF();P1OUT|=0x40;}while(0)
 
-#define FLASHES 6
-#define FLASH_ON_TIME 7
-#define FLASH_OFF_TIME 7
-#define PAUSE 40
+#define YELLOW_PAUSE 4
+#define PAUSE 20
 
-#define TICK_TIME 10000
+#define TICK_TIME 62500
 
 #define SLEEP(x) do{sleep_time=x;__bis_SR_register(CPUOFF + GIE);}while(0)
 #define WAKE() do{__bic_SR_register_on_exit(CPUOFF);}while(0)
@@ -53,7 +56,7 @@ void init(void)
     // timer    
     CCTL0 = CCIE;                             // CCR0 interrupt enabled
 	CCR0 = TICK_TIME;
-    TACTL = TASSEL_2 + MC_2; // SMCLK, contmode
+    TACTL = TASSEL_2 + MC_2 + ID_3; // SMCLK, contmode
 }
 
 // main program body
@@ -65,20 +68,14 @@ int main(void)
 
 	while(1)
 	{
-  	    LED_ON();
-		SLEEP(FLASH_ON_TIME);
-		
-		int i;
-		for (i=1;i<FLASHES;i++) {
-			LED_OFF();
-			SLEEP(FLASH_OFF_TIME);
-		
-			LED_ON();
-			SLEEP(FLASH_ON_TIME);
-		}
-		
-		LED_OFF();
+  	    RED();
+		SLEEP(PAUSE);
+        RED_YELLOW();
+        SLEEP(YELLOW_PAUSE);
+        GREEN();
         SLEEP(PAUSE);
+        YELLOW();
+        SLEEP(YELLOW_PAUSE);
 	}
 
 	return -1;
