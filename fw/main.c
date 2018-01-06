@@ -41,11 +41,11 @@
 #define CH2_M (1<<4)
 #define CH3_M (1<<5)
 
-#define GREEN_ON() do{P1OUT|=0x40;}while(0)
-#define GREEN_OFF() do{P1OUT&=~0x40;}while(0)
+#define GREEN_OFF() do{P1OUT|=0x40;}while(0)
+#define GREEN_ON() do{P1OUT&=~0x40;}while(0)
 #define GREEN_SWAP() do{P1OUT^=0x40;}while(0)
 
-#define THOLD 60
+#define THOLD 70
 #define CENTER 1500
 #define MAX 2200
 #define MIN 800
@@ -113,44 +113,77 @@ int main(void)
 
 	board_init(); // init dco and leds
 
-    // wait both servo inputs are low
-    while (P1IN&(CH2_M|CH3_M)) {};
+    while (1) {
+        // wait both servo inputs are low
+        while (P1IN&(CH2_M|CH3_M)) {};
 
-    uint8_t in_last = 0;
+        GREEN_ON();
 
-    uint16_t ch2_start = 0;
-    uint16_t ch3_start = 0;
+        uint8_t in_last = 0;
 
-	while(1)
-	{
-        uint16_t now = TAR;
-        uint8_t in_now = P1IN;
-        
-        uint8_t in_changes = in_now^in_last;
-        uint8_t in_goes_up = in_changes&in_now;
-        uint8_t in_goes_down = in_changes&in_last;
-        
-        // get channel 3 value
-        if (in_goes_up & CH3_M)
-            ch3_start = now;
-        else if (in_goes_down & CH3_M)
-            ch3(now-ch3_start);
+        uint16_t ch2_start = 0;
+        uint16_t ch3_start = 0;
 
-        // get channel 2 value
-        if (in_goes_up & CH2_M)
-            ch2_start = now;
-        else if (in_goes_down & CH2_M)
-            ch2(now-ch2_start);
+	    while(1) {
+            uint16_t now = TAR;
+            uint8_t in_now = P1IN;
+            
+            uint8_t in_changes = in_now^in_last;
+            uint8_t in_goes_up = in_changes&in_now;
+            uint8_t in_goes_down = in_changes&in_last;
+            
+            // get channel 3 value
+            if (in_goes_up & CH3_M)
+                ch3_start = now;
+            else if (in_goes_down & CH3_M)
+                ch3(now-ch3_start);
 
-        // do some pwm
-        if (pwm<(now&PWM_MAX))
-            IN1_HIGH();
-        else
-            IN1_LOW();
+            // get channel 2 value
+            if (in_goes_up & CH2_M)
+                ch2_start = now;
+            else if (in_goes_down & CH2_M)
+                ch2(now-ch2_start);
 
-        // save input for next round
-        in_last = in_now;
-	}
+            // do some pwm
+            if (pwm<(now&PWM_MAX))
+                IN1_HIGH();
+            else
+                IN1_LOW();
+
+            // save input for next round
+            in_last = in_now;
+
+            // if no servo signal switch off
+            if ((now-ch3_start) > 50000)
+                break;
+	    }
+
+        GREEN_OFF();
+
+        LED_OFF();
+        IN1_LOW();
+        IN2_LOW();
+
+        ch2_start = TAR;
+        ch3_start = 0;
+
+        while (!(P1IN&CH3_M)) {
+            uint16_t now = TAR;
+            if ((now-ch2_start)>10000) {
+                ch2_start = now;
+                ch3_start++;
+                if (ch3_start>=200) {
+                    LED_ON();
+                    GREEN_ON();
+                    ch3_start = 0;
+                }
+                else {
+                    GREEN_OFF();
+                    LED_OFF();
+                }
+            }
+        }
+    }
 
 	return -1;
 }
