@@ -1,20 +1,20 @@
 //******************************************************************************
-// Lunar clock timer for MSP430 launchpad
+// RC signal DC motor drive for MSP430 launchpad
 //
 //
 // author: Ondrej Hejda
-// date:   19.12.2017
+// date:   6.1.2018
 //
 // hardware: MSP430G2231 (launchpad)
 //
 //                MSP430G2231
 //             -----------------
 //         /|\|                 |
-//          | |             P1.2|----> MOTOR BW
-//          --|RST          P1.3|----> MOTOR FW
+//          | |             P1.0|----> LED IN1
+//          --|RST          P1.1|----> LED IN2
 //            |                 |
-//            |             P1.0|----> LED_L
-//            |             P1.1|----> LED_R
+//            |             P1.2|----> MOTOR IN1
+//            |             P1.3|----> MOTOR IN2
 //            |                 |
 //            |             P1.4|<---- CH2 (throtle)
 //            |             P1.5|<---- CH3 (light)
@@ -102,7 +102,7 @@ void ch3(uint16_t v)
 {
     if ((v<MIN) | (v>MAX)) return;
     
-    if (v<1500) LED_OFF();
+    if (v<CENTER) LED_OFF();
     else LED_ON();
 }
 
