@@ -2,7 +2,7 @@
 
 The device based on MSP430G2231 turns one servo signal into PWM output for dc motor driver and the second servo signal into light ON/OFF.
 
-##Schematic:
+## Schematic:
 
 ![Schema](/doc/schema.png)
 
