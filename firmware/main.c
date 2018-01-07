@@ -1,25 +1,23 @@
 //******************************************************************************
-// Lunar clock timer for MSP430 launchpad
+// RC signal DC motor drive for MSP430 launchpad
 //
 //
 // author: Ondrej Hejda
-// date:   19.12.2017
+// date:   6.1.2018
 //
 // hardware: MSP430G2231 (launchpad)
 //
-//                MSP4302231
+//                MSP430G2231
 //             -----------------
 //         /|\|                 |
-//          | |             XTAL|<---> 32.768kHz quartz (realtime clock)
-//          --|RST              |
+//          | |             P1.0|----> LED IN1
+//          --|RST          P1.1|----> LED IN2
 //            |                 |
-//            |             P1.6|----> COIL
-//            |             P1.7|----> COIL
+//            |             P1.2|----> MOTOR IN1
+//            |             P1.3|----> MOTOR IN2
 //            |                 |
-//            |             P1.3|-------  POTENTIOMETER (10k)
-//            |                 |      \/
-//            |             P1.4|----[XXXX]----
-//            |             P1.5|--------------
+//            |             P1.4|<---- CH2 (throtle)
+//            |             P1.5|<---- CH3 (light)
 //            |                 |
 //
 //******************************************************************************
@@ -32,34 +30,29 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define COIL_INIT() do{P1DIR|=0xC0;P1OUT&=~0xC0;}while(0)
-#define COIL_A_ON() do{P1OUT|=0x40;}while(0)
-#define COIL_B_ON() do{P1OUT|=0x80;}while(0)
-#define COIL_OFF() do{P1OUT&=~0xC0;}while(0)
+#define LED_ON() do{P1OUT|=0x01;}while(0)
+#define LED_OFF() do{P1OUT&=0xFC;}while(0)
 
-#define TICKS_MIN 384
-#define TICKS_AVG 448
-#define TICKS_MAX 512
+#define IN1_HIGH() do{P1OUT|=0x04;}while(0)
+#define IN1_LOW() do{P1OUT&=~0x04;}while(0)
+#define IN2_HIGH() do{P1OUT|=0x08;}while(0)
+#define IN2_LOW() do{P1OUT&=~0x08;}while(0)
 
-void rtc_timer_init(void)
-{
-	CCTL0 = CCIE; // CCR0 interrupt enabled
-	CCR0 = 31;	  // f = 32768 / 8(ID_3) / 32(CCR0+1) = 128Hz
-	//CCR0 = 63;	  // f = 32768 / 8(ID_3) / 64(CCR0+1) = 64Hz
-	//CCR0 = 127;	  // f = 32768 / 8(ID_3) / 128(CCR0+1) = 32Hz
-	//CCR0 = 511;	  // f = 32768 / 8(ID_3) / 512(CCR0+1) = 8Hz
-	//CCR0 = 1023;	  // f = 32768 / 8(ID_3) / 1024(CCR0+1) = 4Hz
-	//CCR0 = 2047;	  // f = 32768 / 8(ID_3) / 2048(CCR0+1) = 2Hz
-	TACTL = TASSEL_1 + ID_3 + MC_1; // ACLK, /8, upmode
-}
+#define CH2_M (1<<4)
+#define CH3_M (1<<5)
 
-void analog_init(void)
-{
-    P1DIR |= 0x30; P1OUT&=~0x30;
-    ADC10CTL0 = ADC10SHT_2 + ADC10ON + ADC10IE; // ADC10ON, interrupt enabled
-    ADC10CTL1 = INCH_3;                         // input A3
-    ADC10AE0 |= 0x08;                           // PA.3 ADC option select
-}
+#define GREEN_OFF() do{P1OUT|=0x40;}while(0)
+#define GREEN_ON() do{P1OUT&=~0x40;}while(0)
+#define GREEN_SWAP() do{P1OUT^=0x40;}while(0)
+
+#define THOLD 70
+#define CENTER 1500
+#define MAX 2200
+#define MIN 800
+
+#define PWM_MAX 1023
+
+uint16_t pwm;
 
 // leds and dco init
 void board_init(void)
@@ -68,10 +61,50 @@ void board_init(void)
 	BCSCTL1 = CALBC1_1MHZ;		// Set DCO
 	DCOCTL = CALDCO_1MHZ;
 
-	COIL_INIT();
+    // led and motor outputs
+	P1DIR |= 0x4F; P1OUT &= 0xB0;
+    // servo signal input
+    P1DIR &= 0xCF;
+
+    // start timer
+    TACTL = TASSEL_2 + MC_2; // SMCLK, continuous
+
+    LED_OFF();
 }
 
-volatile uint16_t ticks = TICKS_AVG;
+// channel 2
+void ch2(uint16_t v)
+{
+    if ((v<MIN) | (v>MAX)) return;
+
+    uint16_t p;
+
+    if (v < (CENTER - THOLD)) {
+        p = CENTER - v;
+        p <<= 1;
+        pwm = p;
+        IN2_HIGH();
+    }
+    else if (v > (CENTER + THOLD)) {
+        p = v - CENTER;
+        p <<= 1;
+        pwm = PWM_MAX - p;
+        IN2_LOW();
+    }
+    else {
+        pwm = PWM_MAX;
+        IN2_LOW();
+    }
+}
+
+// channel 3
+void ch3(uint16_t v)
+{
+    if ((v<MIN) | (v>MAX)) return;
+    
+    if (v<CENTER) LED_OFF();
+    else LED_ON();
+}
 
 // main program body
 int main(void)
@@ -79,78 +112,78 @@ int main(void)
 	WDTCTL = WDTPW + WDTHOLD;	// Stop WDT
 
 	board_init(); // init dco and leds
-	rtc_timer_init(); // init 32kHz clock timer
-    analog_init();
 
-	while(1)
-	{
-        __bis_SR_register(CPUOFF + GIE); // enter sleep mode
-        // switch on potentiometer
-        P1OUT |= 0x20;
-        __delay_cycles(200);
-        // start conversion
-        ADC10CTL0 |= ENC + ADC10SC;
-        __bis_SR_register(CPUOFF + GIE);
-        // get value
-        ticks = TICKS_MIN + (ADC10MEM>>3);
-        // switch it off
-        P1OUT &= ~0x20;
-	}
+    while (1) {
+        // wait both servo inputs are low
+        while (P1IN&(CH2_M|CH3_M)) {};
+
+        GREEN_ON();
+
+        uint8_t in_last = 0;
+
+        uint16_t ch2_start = 0;
+        uint16_t ch3_start = 0;
+
+	    while(1) {
+            uint16_t now = TAR;
+            uint8_t in_now = P1IN;
+            
+            uint8_t in_changes = in_now^in_last;
+            uint8_t in_goes_up = in_changes&in_now;
+            uint8_t in_goes_down = in_changes&in_last;
+            
+            // get channel 3 value
+            if (in_goes_up & CH3_M)
+                ch3_start = now;
+            else if (in_goes_down & CH3_M)
+                ch3(now-ch3_start);
+
+            // get channel 2 value
+            if (in_goes_up & CH2_M)
+                ch2_start = now;
+            else if (in_goes_down & CH2_M)
+                ch2(now-ch2_start);
+
+            // do some pwm
+            if (pwm<(now&PWM_MAX))
+                IN1_HIGH();
+            else
+                IN1_LOW();
+
+            // save input for next round
+            in_last = in_now;
+
+            // if no servo signal switch off
+            if ((now-ch3_start) > 50000)
+                break;
+	    }
+
+        GREEN_OFF();
+
+        LED_OFF();
+        IN1_LOW();
+        IN2_LOW();
+
+        ch2_start = TAR;
+        ch3_start = 0;
+
+        while (!(P1IN&CH3_M)) {
+            uint16_t now = TAR;
+            if ((now-ch2_start)>10000) {
+                ch2_start = now;
+                ch3_start++;
+                if (ch3_start>=200) {
+                    LED_ON();
+                    GREEN_ON();
+                    ch3_start = 0;
+                }
+                else {
+                    GREEN_OFF();
+                    LED_OFF();
+                }
+            }
+        }
+    }
 
 	return -1;
-}
-
-/** interrupt section **/
-
-// Timer A0 interrupt service routine
-#pragma vector=TIMER0_A0_VECTOR
-__interrupt void Timer_A (void)
-{
-    static uint16_t cnt = 0;
-    static uint16_t coil_on = 0;
-
-    /*// standard clock (16Hz tick)
-	if ((cnt&0x07)==0) {
-		if (cnt&0x08)
-			COIL_A_ON();
-		else
-			COIL_B_ON();
-        coil_on = 2;
-	}*/
-    
-    // lunar clock
-    static uint16_t next = TICKS_AVG;
-    if (cnt==next) {
-        static bool A = true;
-        if (A)
-            COIL_A_ON();
-        else
-            COIL_B_ON();
-        //LED_GREEN_ON();
-        A = !A;
-        coil_on = 2;
-        next += ticks;
-    }
-    
-    // coil zeroing
-	else {
-        if (coil_on) {
-            //LED_GREEN_OFF();
-            coil_on--;
-            if (coil_on==0)
-                COIL_OFF();
-        }   
-	}
-
-    if (cnt==0)
-        __bic_SR_register_on_exit(CPUOFF); // Clear CPUOFF bit from 0(SR)
-
-	cnt++;
-}
-
-// ADC10 interrupt service routine
-#pragma vector=ADC10_VECTOR
-__interrupt void ADC10_ISR(void)
-{
-    __bic_SR_register_on_exit(CPUOFF); // Clear CPUOFF bit from 0(SR)
 }

@@ -1,11 +1,8 @@
-# not so lunar clock
-MSP430G based clock slow down device.
+# PWM DC motor driver with servo input signal
 
-## description
-The MCU replaces standard quartz clock electronics. It uses RTC with 32.768kHz crystal. MCU is mostly in sleep mode. The clock speed can be setted by external trimmer to 24 - 32 days. The measurement is done once in several minutes and the trimmer is switched off when it's not needed - to save some power. The device is powered by two AAA bateries. The higher voltage than standard clock have is needed for MCU.
+The device based on MSP430G2231 turns one servo signal into PWM output for dc motor driver and the second servo signal into light ON/OFF.
 
-![the clock](/doc/back_side.jpg)
+##Schematic:
 
-## todo
-Switching off the ADC module when it's not needed should help to reduce power consumption. Maybe I'll try it in some next years, when bateries are gone...
+![Schema](/doc/schema.png)
 

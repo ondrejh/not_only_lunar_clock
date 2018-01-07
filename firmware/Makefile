@@ -8,10 +8,8 @@
 # $(TARGET).elf $(TARGET).hex and $(TARGET).txt nad $(TARGET).map are all generated.
 # The TXT file is used for BSL loading, the ELF can be used for JTAG use
 #
-TARGET     = msp430clock
-#MCU        = msp430g2553
+TARGET     = msp430reg
 MCU        = msp430g2231
-#MCU        = msp430g2452
 # List all the source files here
 # eg if you have a source file foo.c then list it here
 SOURCES = main.c
