@@ -1,6 +1,6 @@
-# PWM DC motor driver with servo input signal
+# RC servo tester
 
-The device based on MSP430G2231 turns one servo signal into PWM output for dc motor driver and the second servo signal into light ON/OFF.
+The device based on MSP430G2452 generates servo signal - center, right, left - toggled by button.
 
 ##Schematic:
 

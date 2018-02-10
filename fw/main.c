@@ -1,42 +1,39 @@
 //******************************************************************************
-// LiPo voltage guard using MSP430 launchpad
+// RC signal DC motor drive for MSP430 launchpad
 //
 //
 // author: Ondrej Hejda
-// date:   8.2.2018
+// date:   6.1.2018
 //
-// hardware: MSP430G2231 (launchpad)
+// hardware: MSP430G2452 (launchpad)
 //
-//                MSP430G2231
+//                MSP430G2452
 //             -----------------
 //         /|\|                 |
-//          | |             P1.0|----> RED LED
-//          --|RST          P1.6|----> GREEN LED
+//          | |             P1.0|----> RED LED (not used)
+//          --|RST              |
+//            |             P1.3|<---- BUTTON
 //            |                 |
-//            |             P1.4|----> BEEP +
-//            |             P1.5|----> BEEP -
-//            |                 |
+//            |             P1.5|----> SERVO
 //
 //******************************************************************************
 
 // include section
 //#include <msp430g2553.h>
-#include <msp430g2231.h>
-//#include <msp430g2452.h>
+//#include <msp430g2231.h>
+#include <msp430g2452.h>
 
 #include <stdint.h>
 #include <stdbool.h>
 
-#define GREEN_ON() do{P1OUT|=0x40;}while(0)
-#define GREEN_OFF() do{P1OUT&=~0x40;}while(0)
-#define RED_ON() do{P1OUT|=0x01;}while(0)
-#define RED_OFF() do{P1OUT&=~0x01;}while(0)
+#define LED_ON() do{P1OUT|=0x01;}while(0)
+#define LED_OFF() do{P1OUT&=0xFE;}while(0)
+#define LED_SWAP() do{P1OUT^=0x01;}while(0)
 
-#define BEEP_OFF() do{P1OUT&=~0x30;}while(0)
-#define BEEP_P() do{BEEP_OFF();P1OUT|=0x10;}while(0)
-#define BEEP_N() do{BEEP_OFF();P1OUT|=0x20;}while(0);
-
-#define BEEP_PERIOD 133
+#define CENTER 1500
+#define MAX 2000
+#define MIN 1000
+#define STEP 20
 
 // leds and dco init
 void board_init(void)
@@ -46,11 +43,21 @@ void board_init(void)
 	DCOCTL = CALDCO_1MHZ;
 
     // led and motor outputs
-	P1DIR |= 0x71; P1OUT &= 0x00;
+	P1DIR |= 0x21; P1OUT &= ~0x21;
 
     // start timer
-    TACTL = TASSEL_2 + MC_2; // SMCLK, continuous
+    CCTL0 = CCIE;                             // CCR0 interrupt enabled
+    CCR0 = 1000;
+    TACTL = TASSEL_2 + MC_2;                  // SMCLK, contmode
+
+    P1REN |= 0x08;
+    P1DIR &= ~0x08;
+
+    LED_OFF();
 }
+
+int o = CENTER;
+int lo = CENTER;
 
 // main program body
 int main(void)
@@ -59,31 +66,96 @@ int main(void)
 
 	board_init(); // init dco and leds
 
-    uint16_t last = 0;
     while (1) {
-        uint16_t now = TAR;
-        if ((now-last)>=BEEP_PERIOD) {
-            static int cnt;
-            cnt ++;
-            cnt &= 3;
-            switch (cnt) {
-            case 0:
-                BEEP_OFF();
-                break;
-            case 1:
-                BEEP_P();
-                break;
-            case 2:
-                BEEP_OFF();
-                break;
-            case 3:
-                BEEP_N();
-                break;
-            }
-            last += BEEP_PERIOD;
-            P1OUT ^= 0x10;
-        }
+        __bis_SR_register(LPM0_bits + GIE);       // Enter LPM0 w/ interrupt
     }
 
 	return -1;
+}
+
+void do_change(void)
+{
+    static int s = 0;
+    switch (s) {
+    case 0:
+        o = MAX;
+        s++;
+        break;
+    case 1:
+        o = CENTER;
+        s++;
+        break;
+    case 2:
+        o = MIN;
+        s++;
+        break;
+    case 3:
+        o = CENTER;
+        s=0;
+        break;
+    default:
+        s=0;
+        break;
+    }
+}
+
+// Timer A0 interrupt service routine
+//void __attribute__ ((interrupt(TIMERA0_VECTOR))) Timer_A (void)
+void __attribute__ ((interrupt(TIMER0_A0_VECTOR))) Timer_A (void)
+{
+    static int s = 0;
+
+    switch(s) {
+    case 0:
+        P1OUT |= 0x20;
+        if (o>lo)
+            lo += STEP;
+        else if (o<lo)
+            lo -= STEP;
+        CCR0 += lo;
+        s++;
+        break;
+    case 1:
+        P1OUT &= ~0x20;
+        CCR0 += 20000-lo;
+        s = 0;
+        break;
+    default:
+        s = 0;
+        break;
+    }
+
+    bool p = ((P1IN&0x08)!=0);
+    static int pc = 0;
+    static int ps = 0;
+
+    if (s==0) {
+        switch(ps) {
+        case 0:
+            if (p)
+                pc = 0;
+            else
+                pc ++;
+            if (pc>5) {
+                ps ++;
+                pc = 0;
+                do_change();
+            }
+            break;
+        case 1:
+            if (p)
+                pc ++;
+            else
+                p = 0;
+            if (pc>5) {
+                ps = 0;
+                pc = 0;
+            }
+            break;
+        default:
+            pc = 0;
+            ps = 0;
+            break;
+        }
+    }
 }
