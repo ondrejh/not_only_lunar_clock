@@ -1,23 +1,23 @@
 //******************************************************************************
-// RC signal DC motor drive for MSP430 launchpad
+// RC signal DC motor drive with voltage monitoring for MSP430 launchpad
 //
 //
 // author: Ondrej Hejda
-// date:   6.1.2018
+// date:   18.2.2018
 //
 // hardware: MSP430G2231 (launchpad)
 //
 //                MSP430G2231
 //             -----------------
 //         /|\|                 |
-//          | |             P1.0|----> LED IN1
-//          --|RST          P1.1|----> LED IN2
+//          | |             P1.6|----> GREEN LED
+//          --|RST          P1.5|----> RED LED
 //            |                 |
-//            |             P1.2|----> MOTOR IN1
+//            |             P1.4|----> MOTOR IN1
 //            |             P1.3|----> MOTOR IN2
 //            |                 |
-//            |             P1.4|<---- CH2 (throtle)
-//            |             P1.5|<---- CH3 (light)
+//            |             P1.1|<---- ADC (input voltage)
+//            |             P1.0|<---- CH2 (throtle)
 //            |                 |
 //
 //******************************************************************************
@@ -30,20 +30,18 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define LED_ON() do{P1OUT|=0x01;}while(0)
-#define LED_OFF() do{P1OUT&=0xFC;}while(0)
+#define RED_LED_OFF() do{P1OUT|=0x20;}while(0)
+#define RED_LED_ON() do{P1OUT&=~0x20;}while(0)
 
-#define IN1_HIGH() do{P1OUT|=0x04;}while(0)
-#define IN1_LOW() do{P1OUT&=~0x04;}while(0)
+#define GREEN_LED_OFF() do{P1OUT|=0x40;}while(0)
+#define GREEN_LED_ON() do{P1OUT&=~0x40;}while(0)
+
+#define IN1_HIGH() do{P1OUT|=0x10;}while(0)
+#define IN1_LOW() do{P1OUT&=~0x10;}while(0)
 #define IN2_HIGH() do{P1OUT|=0x08;}while(0)
 #define IN2_LOW() do{P1OUT&=~0x08;}while(0)
 
-#define CH2_M (1<<4)
-#define CH3_M (1<<5)
-
-#define GREEN_OFF() do{P1OUT|=0x40;}while(0)
-#define GREEN_ON() do{P1OUT&=~0x40;}while(0)
-#define GREEN_SWAP() do{P1OUT^=0x40;}while(0)
+#define CH2_M (1<<0)
 
 #define THOLD 70
 #define CENTER 1500
@@ -62,14 +60,15 @@ void board_init(void)
 	DCOCTL = CALDCO_1MHZ;
 
     // led and motor outputs
-	P1DIR |= 0x4F; P1OUT &= 0xB0;
+	P1DIR |= 0x78; P1OUT &= ~0x78;
     // servo signal input
-    P1DIR &= 0xCF;
+    P1DIR &= ~0x01;
 
     // start timer
     TACTL = TASSEL_2 + MC_2; // SMCLK, continuous
 
-    LED_OFF();
+    GREEN_LED_ON();
+    RED_LED_ON();
 }
 
 // channel 2
@@ -97,15 +96,6 @@ void ch2(uint16_t v)
     }
 }
 
-// channel 3
-void ch3(uint16_t v)
-{
-    if ((v<MIN) | (v>MAX)) return;
-    
-    if (v<CENTER) LED_OFF();
-    else LED_ON();
-}
-
 // main program body
 int main(void)
 {
@@ -114,15 +104,15 @@ int main(void)
 	board_init(); // init dco and leds
 
     while (1) {
-        // wait both servo inputs are low
-        while (P1IN&(CH2_M|CH3_M)) {};
+        // wait servo input is low
+        while (P1IN&(CH2_M)) {};
 
-        GREEN_ON();
+        RED_LED_OFF();
+        GREEN_LED_ON();
 
         uint8_t in_last = 0;
 
-        uint16_t ch2_start = 0;
-        uint16_t ch3_start = 0;
+        uint16_t ch2_start = P1IN;
 
 	    while(1) {
             uint16_t now = TAR;
@@ -132,12 +122,6 @@ int main(void)
             uint8_t in_goes_up = in_changes&in_now;
             uint8_t in_goes_down = in_changes&in_last;
             
-            // get channel 3 value
-            if (in_goes_up & CH3_M)
-                ch3_start = now;
-            else if (in_goes_down & CH3_M)
-                ch3(now-ch3_start);
-
             // get channel 2 value
             if (in_goes_up & CH2_M)
                 ch2_start = now;
@@ -154,34 +138,18 @@ int main(void)
             in_last = in_now;
 
             // if no servo signal switch off
-            if ((now-ch3_start) > 50000)
+            if ((now-ch2_start) > 50000)
                 break;
 	    }
 
-        GREEN_OFF();
+        GREEN_LED_OFF();
 
-        LED_OFF();
         IN1_LOW();
         IN2_LOW();
 
         ch2_start = TAR;
-        ch3_start = 0;
 
-        while (!(P1IN&CH3_M)) {
-            uint16_t now = TAR;
-            if ((now-ch2_start)>10000) {
-                ch2_start = now;
-                ch3_start++;
-                if (ch3_start>=200) {
-                    LED_ON();
-                    GREEN_ON();
-                    ch3_start = 0;
-                }
-                else {
-                    GREEN_OFF();
-                    LED_OFF();
-                }
-            }
+        while (!(P1IN&CH2_M)) {
         }
     }
 
